@@ -1,0 +1,421 @@
+:root {
+    --bg: #0f1117;
+    --panel: #171a22;
+    --panel2: #1e2330;
+    --text: #eceff4;
+    --muted: #9aa4b2;
+    --accent: #74c0fc;
+    --good: #8ce99a;
+    --warn: #ffd43b;
+    --danger: #ff8787;
+    --travel: #4dabf7;
+    --border: #2b3242;
+    --bar: #353d50;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.4;
+  }
+
+  button, input { font: inherit; }
+
+  .app {
+    width: min(980px, 100%);
+    margin: 0 auto;
+    padding: 14px;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    background: rgba(15,17,23,.96);
+    backdrop-filter: blur(8px);
+    padding: 10px 0 12px;
+  }
+
+  .energy-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+
+  .energy-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-weight: 700;
+  }
+
+  .energy-bar, .progress-bar {
+    height: 10px;
+    margin-top: 7px;
+    border-radius: 999px;
+    background: var(--bar);
+    overflow: hidden;
+  }
+
+  .energy-fill, .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--accent);
+    transition: width .08s linear;
+  }
+
+  .top-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .small-btn {
+    border: 1px solid var(--border);
+    background: var(--panel2);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+  }
+
+  h1, h2, h3 { margin: 0; }
+  h1 { font-size: 1.35rem; }
+  h2 { font-size: 1.1rem; margin-bottom: 10px; }
+
+  .stage-header {
+    margin: 6px 0 14px;
+  }
+
+  .stage-header p {
+    color: var(--muted);
+    margin: 5px 0 0;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(270px, .8fr);
+    gap: 14px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .task-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .task {
+    position: relative;
+    border: 1px solid var(--border);
+    background: var(--panel2);
+    border-radius: 12px;
+    padding: 11px;
+  }
+
+  .task.completed-once {
+    border-color: rgba(140,233,154,.55);
+  }
+
+  .task.travel {
+    border-color: rgba(77,171,247,.8);
+    background: rgba(77,171,247,.10);
+  }
+
+  .task-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .task-name {
+    font-weight: 800;
+    font-size: 1rem;
+  }
+
+  .guided-label {
+    color: var(--good);
+    font-size: .82rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .task-meta {
+    color: var(--muted);
+    font-size: .86rem;
+    margin-top: 3px;
+  }
+
+  .task-status {
+    white-space: nowrap;
+    color: var(--good);
+    font-size: .8rem;
+    font-weight: 700;
+  }
+
+  .task button {
+    margin-top: 9px;
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    padding: 10px;
+    background: #364fc7;
+    color: white;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .task.travel button {
+    background: var(--travel);
+    color: #07131f;
+  }
+
+  .task button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+  }
+
+  .task-running {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: .85rem;
+  }
+
+  .skills {
+    display: grid;
+    gap: 9px;
+  }
+
+  .skill {
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--panel2);
+    padding: 10px;
+  }
+
+  .skill-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: baseline;
+  }
+
+  .skill-name {
+    font-weight: 800;
+  }
+
+  .tag {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: .72rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 1px 6px;
+    vertical-align: middle;
+  }
+
+  .skill-level {
+    font-weight: 800;
+  }
+
+  .skill-xp {
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: .82rem;
+  }
+
+  .skill-speed {
+    margin-top: 5px;
+    font-size: .86rem;
+    font-weight: 750;
+  }
+
+  .skill-progress {
+    margin-top: 6px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--bar);
+    overflow: hidden;
+  }
+
+  .skill-progress > div {
+    height: 100%;
+    background: var(--good);
+  }
+
+  .tooltip {
+    position: fixed;
+    z-index: 100;
+    width: min(360px, calc(100vw - 24px));
+    background: #0b0d12;
+    color: var(--text);
+    border: 1px solid #3b4356;
+    border-radius: 12px;
+    padding: 11px 12px;
+    box-shadow: 0 10px 35px rgba(0,0,0,.45);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(5px);
+    transition: opacity .08s ease, transform .08s ease;
+    white-space: pre-line;
+    font-size: .9rem;
+  }
+
+  .tooltip.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .story-screen {
+    display: none;
+    min-height: 55vh;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .story-card {
+    width: min(650px, 100%);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  .story-card p {
+    color: var(--muted);
+  }
+
+  .story-card button {
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    padding: 11px;
+    background: #364fc7;
+    color: white;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .debug {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: .82rem;
+  }
+
+  details {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 9px 11px;
+  }
+
+  details summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 700;
+  }
+
+  .debug-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 9px;
+  }
+
+  .debug-grid label {
+    display: grid;
+    gap: 4px;
+  }
+
+  .debug-grid input {
+    width: 100%;
+    background: #0d1016;
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px;
+  }
+
+  .debug-note {
+    margin: 8px 0 0;
+  }
+
+  @media (max-width: 760px) {
+    .layout { grid-template-columns: 1fr; }
+    .topbar { grid-template-columns: 1fr; }
+    .top-actions { justify-content: flex-end; }
+  }
+
+
+/* Temporary QA control; safe to hide/remove before release. */
+.qa-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px dashed rgba(120, 190, 255, 0.55);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.qa-toggle input {
+  margin: 0;
+}
+
+
+/* V13-Warrior-Beta playtest report */
+.qa-report-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.78);
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.qa-report-card {
+  width: min(900px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: #15171d;
+  border: 1px solid #4a4f5e;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 16px 60px rgba(0,0,0,.5);
+}
+.qa-report-card h2 { margin-top: 0; }
+#qaReportText {
+  width: 100%;
+  min-height: 55vh;
+  resize: vertical;
+  box-sizing: border-box;
+  background: #0d0f14;
+  color: #e7e9ef;
+  border: 1px solid #4a4f5e;
+  border-radius: 8px;
+  padding: 12px;
+  font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.qa-report-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}

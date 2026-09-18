@@ -44,7 +44,7 @@
 
   function freshQaState() {
     return {
-      buildTag: "V13-Warrior-Beta",
+      buildTag: "V13-Warrior-Beta-EnergyCurve",
       activePlayMs: 0,
       taskStarts: {},
       taskCompletions: {},
@@ -56,7 +56,8 @@
       warriorClearActiveMs: null,
       warriorClearAt: null,
       warriorClearLoopNumber: null,
-      warriorClearSkills: null
+      warriorClearSkills: null,
+      autoTaskStarts: 0
     };
   }
 
@@ -81,6 +82,10 @@
       completed,
       firstClears: {},
       loopCount: {},
+      stageClears: {},
+      autoEnabled: false,
+      autoTasks: {},
+      autoDoneThisLoop: {},
       qa: freshQaState(),
       trainingFunds: false,
       selectedClass: null,
@@ -100,6 +105,10 @@
       completed: { ...fresh.completed, ...(loaded.completed || {}) },
       firstClears: { ...(loaded.firstClears || {}) },
       loopCount: { ...(loaded.loopCount || {}) },
+      stageClears: {},
+      autoEnabled: loaded.autoEnabled === true,
+      autoTasks: { ...(loaded.autoTasks || {}) },
+      autoDoneThisLoop: { ...(loaded.autoDoneThisLoop || {}) },
       qa: {
         ...fresh.qa,
         ...(loaded.qa || {}),
@@ -114,6 +123,22 @@
         }
       }
     };
+
+    for (const path of Object.keys(CLASS_SKILLS)) {
+      result.stageClears[path] = { ...(loaded.stageClears?.[path] || {}) };
+    }
+
+    // Migration for beta saves created before stage-clear tracking existed.
+    // Visiting Stage N proves that Stage N-1's travel was completed. A recorded
+    // full clear proves every Warrior stage was cleared at least once.
+    const highestWarrior = Number(result.qa?.highestStage?.warrior || 0);
+    for (let stage = 1; stage < highestWarrior; stage++) {
+      result.stageClears.warrior[String(stage)] = true;
+    }
+    if (result.qa?.warriorClearActiveMs !== null) {
+      for (let stage = 1; stage <= 10; stage++) result.stageClears.warrior[String(stage)] = true;
+    }
+    result.qa.buildTag = "V13-Warrior-Beta-EnergyCurve";
 
     for (const [id, skill] of Object.entries(result.skills)) {
       result.skills[id] = {
@@ -446,19 +471,24 @@
   }
 
   function underlevelEnergyMultiplier(proficiency) {
-    // p = current proficiency / Recommended Minimum.
-    // Anchors intentionally match the design targets:
-    //   p = 0.80 -> 1.20x Energy
-    //   p = 0.50 -> 2.00x Energy
-    // From there the penalty accelerates rapidly toward zero proficiency, so
-    // severely underleveled content becomes practically impossible on a normal
-    // Energy bar without requiring a hard level gate.
+    // Below 100% proficiency, Energy rises faster than inverse scaling:
+    //     multiplier = p ^ -1.5
+    // This makes attempting content materially above your current ability
+    // expensive without introducing a hard level gate.
     const minP = BALANCE.taskScaling.underlevelMinProficiency;
     const p = Math.max(minP, Math.min(1, proficiency));
-    const deficit = 1 - p;
-    const severity = (4 - 2 * p) / 3;
+    return Math.pow(p, -BALANCE.taskScaling.underlevelEnergyExponent);
+  }
 
-    return 1 + (deficit / p) * severity;
+  function overlevelEnergyMultiplier(proficiency) {
+    // Above 100% proficiency, Energy still gets cheaper, but more slowly than
+    // the old straight inverse curve. This keeps newer-stage training more
+    // attractive while preserving a meaningful reward for overleveling.
+    const p = Math.max(1, proficiency);
+    return Math.max(
+      BALANCE.taskScaling.minEnergyFraction,
+      Math.pow(p, -BALANCE.taskScaling.overlevelEnergyExponent)
+    );
   }
 
   function taskEnergyMultiplier(task, skillOverrides = null) {
@@ -468,10 +498,7 @@
       return underlevelEnergyMultiplier(proficiency);
     }
 
-    return Math.max(
-      BALANCE.taskScaling.minEnergyFraction,
-      1 / Math.max(1, proficiency)
-    );
+    return overlevelEnergyMultiplier(proficiency);
   }
 
   // Future speed effects (perks/prestige/etc.) enter here. Their bonus above 1
@@ -706,6 +733,78 @@
     return true;
   }
 
+  function markStageCleared(path, stage) {
+    if (!CLASS_SKILLS[path]) return;
+    if (!state.stageClears[path]) state.stageClears[path] = {};
+    state.stageClears[path][String(stage)] = true;
+  }
+
+  function autoGloballyUnlocked() {
+    return Object.values(state.stageClears || {}).some(stages =>
+      Boolean(stages?.["3"])
+    );
+  }
+
+  function autoGloballyEnabled() {
+    return autoGloballyUnlocked() && state.autoEnabled === true;
+  }
+
+  function setAutoEnabled(enabled) {
+    if (!autoGloballyUnlocked()) return;
+    state.autoEnabled = Boolean(enabled);
+    saveState();
+    renderClassArea();
+    if (state.autoEnabled) scheduleAutoAdvance();
+  }
+
+  function stageAutoUnlocked(path, stage) {
+    return autoGloballyUnlocked() && Boolean(state.stageClears?.[path]?.[String(stage)]);
+  }
+
+  function autoTaskSelected(task) {
+    return Boolean(state.autoTasks?.[task.id]);
+  }
+
+  function toggleAutoTask(task, checked) {
+    if (!stageAutoUnlocked(task.path, task.stage)) return;
+    state.autoTasks[task.id] = Boolean(checked);
+    saveState();
+    renderClassArea();
+  }
+
+  let autoTickScheduled = false;
+
+  function scheduleAutoAdvance(delay = 40) {
+    if (autoTickScheduled) return;
+    autoTickScheduled = true;
+    setTimeout(() => {
+      autoTickScheduled = false;
+      tryAutoAdvance();
+    }, delay);
+  }
+
+  function tryAutoAdvance() {
+    if (activeTask || !CLASS_SKILLS[state.path]) return;
+    if (!autoGloballyEnabled()) return;
+    if (!stageAutoUnlocked(state.path, state.stage)) return;
+
+    const tasks = CLASS_TASKS.filter(task =>
+      task.path === state.path &&
+      task.stage === state.stage &&
+      autoTaskSelected(task) &&
+      !state.autoDoneThisLoop?.[task.id]
+    );
+
+    // Preserve the path file's task order. Travel tasks are commonly listed
+    // first, but canStartTask() naturally skips them until mandatory work is
+    // complete. As soon as the checked travel becomes legal, Auto moves on.
+    for (const task of tasks) {
+      if (!canStartTask(task)) continue;
+      startTask(task.id, { auto: true });
+      return;
+    }
+  }
+
   function clearClassLoopCompletion(path) {
     for (const task of CLASS_TASKS) {
       if (task.path === path) state.completed[task.id] = false;
@@ -720,6 +819,7 @@
     state.path = path;
     state.stage = 1;
     state.loopCount[path] = (state.loopCount[path] || 0) + 1;
+    state.autoDoneThisLoop = {};
     state.qa.loopResets += 1;
     qaMarkStageVisit(path, 1);
     activeTask = null;
@@ -728,6 +828,7 @@
     saveState();
     showCurrentLocation();
     render();
+    scheduleAutoAdvance();
   }
 
   // ============================================================
@@ -848,9 +949,14 @@
     render();
   }
 
-  function startTask(taskId) {
+  function startTask(taskId, options = {}) {
     const task = findTask(taskId);
     if (!task || !canStartTask(task)) return;
+
+    if (options.auto) {
+      state.autoDoneThisLoop[task.id] = true;
+      state.qa.autoTaskStarts = (state.qa.autoTaskStarts || 0) + 1;
+    }
 
     qaIncrement(state.qa.taskStarts, task.id);
 
@@ -944,6 +1050,18 @@
     if (!task.repeatable) state.completed[task.id] = true;
     if (task.id === "earnFunds") state.trainingFunds = true;
 
+    if (CLASS_SKILLS[task.path]) {
+      if (task.type === "travel" && task.destination?.path === task.path && task.destination.stage > task.stage) {
+        markStageCleared(task.path, task.stage);
+      } else {
+        const stageNumbers = Object.keys(PATHS[task.path]?.stages || {}).map(Number).filter(Number.isFinite);
+        const finalStage = stageNumbers.length ? Math.max(...stageNumbers) : null;
+        if (task.stage === finalStage && classStageMandatoryComplete(task.path, task.stage)) {
+          markStageCleared(task.path, task.stage);
+        }
+      }
+    }
+
     activeTask = null;
 
     if (task.type === "travel" && task.destination) {
@@ -984,6 +1102,7 @@
     }
 
     render();
+    scheduleAutoAdvance();
   }
 
   function endTaskFromEnergyDepletion(task) {
@@ -1017,11 +1136,13 @@
     if (enteringClassFromAdventurer) {
       state.energy = state.maxEnergy;
       state.loopCount[destination.path] = state.loopCount[destination.path] || 0;
+      state.autoDoneThisLoop = {};
       clearClassLoopCompletion(destination.path);
     }
 
     saveState();
     showCurrentLocation();
+    scheduleAutoAdvance();
   }
 
   // ============================================================
@@ -1135,7 +1256,7 @@
     const warriorLoopsStarted = q.enteredWarrior ? q.loopResets + 1 : 0;
     const lines = [];
 
-    lines.push("=== V13-Warrior-Beta Test Report ===");
+    lines.push("=== V13-Warrior-Beta-EnergyCurve Test Report ===");
     lines.push(`Build: ${q.buildTag}`);
     lines.push(`Active play time: ${qaFormatDuration(q.activePlayMs)}`);
     lines.push(`Warrior clear: ${q.warriorClearActiveMs === null ? "Not yet" : qaFormatDuration(q.warriorClearActiveMs)}`);
@@ -1145,6 +1266,7 @@
     lines.push(`Pre-class restarts: ${q.adventurerRestarts}`);
     lines.push(`Highest Warrior stage reached: ${q.highestStage.warrior || 0}/10`);
     lines.push(`Total task starts: ${starts}`);
+    lines.push(`Auto task starts: ${q.autoTaskStarts || 0}`);
     lines.push(`Total task completions: ${completions}`);
     lines.push("");
 
@@ -1565,6 +1687,33 @@
       `${stageDef?.subtitle || "No stage description yet."}  •  Loop ${loop}`;
     document.getElementById("classSkillsTitle").textContent = `${info.className} Skills`;
 
+    const autoStatus = document.getElementById("classAutoStatus");
+    const autoMasterInput = document.getElementById("classAutoEnabled");
+    const autoMasterWrap = document.getElementById("classAutoMasterToggle");
+    if (autoStatus) {
+      if (!autoGloballyUnlocked()) {
+        autoStatus.textContent = "Auto unlocks after clearing Stage 3 once.";
+        autoStatus.className = "auto-status locked";
+        if (autoMasterWrap) autoMasterWrap.style.display = "none";
+      } else {
+        if (autoMasterWrap) autoMasterWrap.style.display = "inline-flex";
+        if (autoMasterInput) autoMasterInput.checked = state.autoEnabled === true;
+
+        if (!stageAutoUnlocked(state.path, state.stage)) {
+          autoStatus.textContent = state.autoEnabled
+            ? "Auto ON. Clear this stage once before its tasks can be automated."
+            : "Auto OFF. Clear this stage once before its tasks can be automated.";
+          autoStatus.className = "auto-status locked";
+        } else if (state.autoEnabled) {
+          autoStatus.textContent = "Auto ON: checked tasks run once per loop using normal time and Energy.";
+          autoStatus.className = "auto-status unlocked";
+        } else {
+          autoStatus.textContent = "Auto OFF: checked tasks are remembered but will not run automatically.";
+          autoStatus.className = "auto-status unlocked paused";
+        }
+      }
+    }
+
     taskHost.innerHTML = "";
     const tasks = CLASS_TASKS.filter(task => task.path === state.path && task.stage === state.stage);
 
@@ -1629,7 +1778,17 @@
           <div class="task-name">${task.name}${guidedTaskLabel(task)}</div>
           <div class="task-meta">${classTaskMeta(task, estimate)}</div>
         </div>
-        <div class="task-status">${status}</div>
+        <div class="task-right-column">
+          <div class="task-status">${status}</div>
+          ${autoGloballyUnlocked() ? `
+            <label class="auto-task-toggle${stageAutoUnlocked(task.path, task.stage) ? "" : " locked"}"
+              title="${stageAutoUnlocked(task.path, task.stage) ? "Run this task once automatically each loop." : "Clear this stage once to enable Auto here."}">
+              <input type="checkbox" data-auto-task="${task.id}"
+                ${autoTaskSelected(task) ? "checked" : ""}
+                ${stageAutoUnlocked(task.path, task.stage) ? "" : "disabled"}>
+              <span>Auto</span>
+            </label>` : ""}
+        </div>
       </div>
       <div class="progress-bar">
         <div class="progress-fill" data-progress="${task.id}" style="width:${isRunning ? activeTask.progress * 100 : 0}%"></div>
@@ -1639,6 +1798,15 @@
           (state.completed[task.id] && !task.repeatable ? "Completed" : (task.type === "travel" ? "Continue" : "Start Task"))}
       </button>
     `;
+
+    const autoInput = card.querySelector(`[data-auto-task="${task.id}"]`);
+    if (autoInput) {
+      autoInput.addEventListener("click", event => event.stopPropagation());
+      autoInput.addEventListener("change", event => {
+        event.stopPropagation();
+        toggleAutoTask(task, autoInput.checked);
+      });
+    }
 
     card.querySelector("button").addEventListener("click", () => startTask(task.id));
     bindTooltip(card, () => classTaskTooltip(task, info));
@@ -1662,6 +1830,16 @@
     const lines = [task.name, ""];
 
     if (task.description) lines.push(task.description, "");
+
+    if (autoGloballyUnlocked()) {
+      if (stageAutoUnlocked(task.path, task.stage)) {
+        const selected = autoTaskSelected(task) ? "CHECKED" : "UNCHECKED";
+        const master = state.autoEnabled ? "Auto is globally ON" : "Auto is globally OFF";
+        lines.push(`Auto: ${selected} — ${master}. Checked tasks run once per loop when Auto is enabled.`, "");
+      } else {
+        lines.push("Auto: Clear this stage once to enable automation here.", "");
+      }
+    }
 
     if (task.type === "combat") {
       const powers = combatPowers(task.path);
@@ -1997,6 +2175,10 @@
   document.getElementById("classSaveBtn")?.addEventListener("click", saveState);
   document.getElementById("classWipeBtn")?.addEventListener("click", wipeSave);
 
+  document.getElementById("classAutoEnabled")?.addEventListener("change", event => {
+    setAutoEnabled(event.target.checked);
+  });
+
   for (const btn of document.querySelectorAll("[data-qa-report]")) {
     btn.addEventListener("click", showQaReport);
   }
@@ -2018,4 +2200,5 @@
 
   showCurrentLocation();
   render();
+  scheduleAutoAdvance();
 })();

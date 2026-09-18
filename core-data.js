@@ -41,14 +41,20 @@
     },
 
     taskScaling: {
-      // At/above the Recommended Minimum, Energy falls inversely with
-      // proficiency until it reaches this fraction of base cost.
+      // Energy scaling pivots around 100% proficiency:
+      //   below 100%: multiplier = proficiency ^ -1.5
+      //   above 100%: multiplier = proficiency ^ -0.75
+      // The steeper underlevel side makes reaching too far ahead expensive;
+      // the gentler overlevel discount prevents obsolete stages from collapsing
+      // into the best farm simply because their Energy cost approaches zero.
+      underlevelEnergyExponent: 1.50,
+      overlevelEnergyExponent: 0.75,
+
+      // Energy can never fall below 10% of the task's base Energy cost.
       minEnergyFraction: 0.10,
 
-      // Underlevel Energy scaling is continuous and deliberately much harsher
-      // as proficiency approaches zero. This epsilon prevents division by zero;
-      // even at the epsilon the resulting Energy cost is far beyond a normal
-      // 100-Energy bar for meaningful tasks.
+      // Prevent division/power blow-ups at true 0% proficiency. At this epsilon
+      // the resulting Energy cost is intentionally far beyond a 100-Energy bar.
       underlevelMinProficiency: 0.01,
 
       // Tasks tagged guidedPractice add bonus proficiency for Energy/time scaling.

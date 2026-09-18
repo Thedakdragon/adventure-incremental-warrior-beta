@@ -113,7 +113,14 @@
 
     <div class="layout">
       <section class="panel">
-        <h2>Tasks</h2>
+        <div class="task-panel-heading">
+          <h2>Tasks</h2>
+          <label id="classAutoMasterToggle" class="auto-master-toggle" style="display:none;" title="Pause or resume all checked Auto tasks without changing your per-task selections.">
+            <input type="checkbox" id="classAutoEnabled">
+            <span>Auto Enabled</span>
+          </label>
+        </div>
+        <div id="classAutoStatus" class="auto-status locked">Auto unlocks after clearing Stage 3 once.</div>
         <div id="classTaskList" class="task-list"></div>
       </section>
 
@@ -127,7 +134,7 @@
 
 <div id="qaReportOverlay" class="qa-report-overlay" style="display:none;">
   <div class="qa-report-card">
-    <h2>V13-Warrior-Beta Test Report</h2>
+    <h2>V13-Warrior-Beta-EnergyCurve Test Report</h2>
     <p>This report is generated from the save. Copy it and send the whole block back.</p>
     <textarea id="qaReportText" readonly spellcheck="false"></textarea>
     <div class="qa-report-actions">
